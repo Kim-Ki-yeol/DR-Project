@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dr-web-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: alb
+
+    # 외부 공개형 ALB
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # NodePort 서비스 대상으로 전달
+    alb.ingress.kubernetes.io/target-type: instance
+
+    # 헬스체크 경로
+    alb.ingress.kubernetes.io/healthcheck-path: /
+
+    # ALB가 80 포트 리스너를 열도록 설정
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dr-web-service
+                port:
+                  number: 80

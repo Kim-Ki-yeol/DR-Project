@@ -1,0 +1,157 @@
+---
+# Karpenter 설치 플레이북
+# 목적:
+#Terraform이 만든 IAM Role ARN을 읽어옴
+#Karpenter용 ServiceAccount를 IRSA 방식으로 생성
+#Helm으로 Karpenter 설치
+#EC2NodeClass / NodePool 적용
+#설치 후 Pod 상태와 rollout 확인
+- name: Install Karpenter
+  hosts: control
+  become: false
+  vars:
+    # EKS 클러스터 이름
+    # eks.tf에 정의된 실제 클러스터 이름과 같아야 한다.
+    cluster_name: "dr-aws-infra-eks-cluster"
+
+    # AWS 리전
+    aws_region: "ap-northeast-2"
+
+    # 설치할 Karpenter 버전
+    karpenter_version: "1.10.0"
+
+    # 현재 playbook 기준 프로젝트 루트 경로
+    repo_root: "{{ playbook_dir }}/../.."
+
+    # Terraform 디렉토리 경로
+    tf_dir: "{{ repo_root }}/terraform"
+
+    # kubeconfig 경로
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    # 현재 AWS CLI 인증이 정상인지 확인
+    # 자격 증명 문제 있으면 여기서 바로 확인 가능
+    - name: Check AWS identity
+      command: aws sts get-caller-identity
+      changed_when: false
+
+    # kubectl이 현재 EKS 클러스터에 접근 가능한지 확인
+    # kubeconfig 문제 있으면 여기서 실패
+    - name: Check kubectl cluster access
+      command: kubectl cluster-info
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # Terraform output에서 Karpenter Controller IAM Role ARN 읽기
+    # 기존처럼 YOUR_ACCOUNT_ID 하드코딩하지 않고
+    # Terraform이 만든 실제 값을 그대로 가져온다.
+    - name: Read Karpenter role ARN from Terraform output
+      command: terraform -chdir={{ tf_dir }} output -raw karpenter_controller_role_arn
+      register: karpenter_role_arn
+      changed_when: false
+
+    # Terraform output에서 interruption queue 이름 읽기
+    # Spot interruption 등 이벤트 처리를 위해 사용된다.
+    - name: Read Karpenter interruption queue name from Terraform output
+      command: terraform -chdir={{ tf_dir }} output -raw karpenter_interruption_queue_name
+      register: interruption_queue
+      changed_when: false
+
+    # Karpenter ServiceAccount 매니페스트 파일 생성
+    # IRSA를 위해 eks.amazonaws.com/role-arn annotation을 붙인다.
+    - name: Create Karpenter service account manifest
+      copy:
+        dest: /tmp/karpenter-sa.yaml
+        mode: "0644"
+        content: |
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: karpenter
+            namespace: kube-system
+            annotations:
+              eks.amazonaws.com/role-arn: {{ karpenter_role_arn.stdout }}
+
+    # 생성한 ServiceAccount를 클러스터에 적용
+    - name: Apply Karpenter service account
+      command: kubectl apply -f /tmp/karpenter-sa.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # Karpenter Helm values 파일 생성
+    # clusterName: 현재 EKS 클러스터 이름
+    # interruptionQueue: Terraform에서 생성한 큐 이름
+    # serviceAccount.create=false:
+    #   Helm이 SA를 새로 만들지 않고, 위에서 만든 SA를 사용하게 함
+    # controller.resources:
+    #   Karpenter 컨트롤러 Pod의 요청/제한 리소스 설정
+    - name: Create Karpenter values file
+      copy:
+        dest: /tmp/karpenter-values.yaml
+        mode: "0644"
+        content: |
+          settings:
+            clusterName: {{ cluster_name }}
+            interruptionQueue: {{ interruption_queue.stdout }}
+
+          serviceAccount:
+            create: false
+            name: karpenter
+
+          controller:
+            resources:
+              requests:
+                cpu: 250m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+
+    # Helm OCI chart 방식으로 Karpenter 설치
+    # 기존 karpenter/karpenter repo add 방식 대신
+    # OCI 경로를 직접 사용한다.
+    - name: Install Karpenter using Helm OCI chart
+      command: >
+        helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter
+        --version {{ karpenter_version }}
+        -n kube-system
+        --create-namespace
+        -f /tmp/karpenter-values.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # EC2NodeClass 적용
+    # 어떤 서브넷, 보안그룹, AMI, 인스턴스 설정으로 노드를 띄울지 정의
+    - name: Apply EC2NodeClass manifest
+      command: kubectl apply -f {{ repo_root }}/k8s/karpenter/ec2nodeclass.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # NodePool 적용
+    # 노드 확장 정책, 인스턴스 타입 조건, 자원 조건 등을 정의
+    - name: Apply NodePool manifest
+      command: kubectl apply -f {{ repo_root }}/k8s/karpenter/nodepool.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # Karpenter deployment rollout 완료 대기
+    # 설치는 되었지만 실제 Pod가 Ready가 안 된 경우를 잡아낼 수 있다.
+    - name: Wait for Karpenter rollout
+      command: kubectl rollout status deployment/karpenter -n kube-system --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # 설치된 Karpenter Pod 상태 확인
+    # 최종적으로 Pod가 정상인지 조회한다.
+    - name: Check Karpenter pods
+      command: kubectl get pods -n kube-system -l app.kubernetes.io/name=karpenter
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false

@@ -1,0 +1,21 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Sensitive
+*.tfvars
+.env
+
+# kubeconfig
+.kube/
+
+# OS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# node_modules (혹시 있으면)
+node_modules/

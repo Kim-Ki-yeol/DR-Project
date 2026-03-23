@@ -1,0 +1,23 @@
+---
+- name: Install HPA for application
+  hosts: control
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    # 애플리케이션 HPA 배포
+    - name: Apply application HPA manifest
+      command: >
+        kubectl apply -f {{ repo_root }}/k8s/hpa/app-hpa.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    # HPA 상태 확인
+    - name: Check HPA resources
+      command: kubectl get hpa -A
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false

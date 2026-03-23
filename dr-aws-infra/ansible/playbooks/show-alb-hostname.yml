@@ -1,0 +1,20 @@
+---
+- name: Show ALB hostname created by ingress
+  hosts: control
+  become: false
+  vars:
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    - name: Read ingress hostname
+      command: >
+        kubectl get ingress dr-web-ingress
+        -o jsonpath={.status.loadBalancer.ingress[0].hostname}
+      register: ingress_hostname
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Print ingress hostname
+      debug:
+        msg: "ALB hostname = {{ ingress_hostname.stdout }}"

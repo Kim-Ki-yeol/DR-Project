@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dr-efs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: dr-efs-sc
+  resources:
+    requests:
+      storage: 5Gi

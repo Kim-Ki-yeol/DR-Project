@@ -1,0 +1,44 @@
+---
+- name: Deploy DR application and ingress
+  hosts: control
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+  tasks:
+    - name: Apply DR deployment
+      command: kubectl apply -f {{ repo_root }}/k8s/app/dr-web-deployment.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Apply DR service
+      command: kubectl apply -f {{ repo_root }}/k8s/app/dr-web-service.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Apply DR ingress
+      command: kubectl apply -f {{ repo_root }}/k8s/ingress/dr-web-ingress.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Wait for DR deployment rollout
+      command: kubectl rollout status deployment/dr-web --timeout=180s
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Check service
+      command: kubectl get svc dr-web-service
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Check ingress
+      command: kubectl get ingress dr-web-ingress
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false

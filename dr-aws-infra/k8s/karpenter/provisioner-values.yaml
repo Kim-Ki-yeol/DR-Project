@@ -1,0 +1,21 @@
+settings:
+  # Terraform eks.tf 에서 생성한 클러스터 이름과 동일해야 함
+  clusterName: dr-aws-infra-eks-cluster
+
+  # 인터럽션 큐 이름
+  # 실제 SQS 큐를 Terraform으로 만들지 않았다면 나중에 추가 작업이 필요하다
+  interruptionQueue: dr-aws-infra-karpenter-interruption
+
+serviceAccount:
+  # IRSA 방식 사용 시 기존 서비스 계정 사용
+  create: false
+  name: karpenter
+
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

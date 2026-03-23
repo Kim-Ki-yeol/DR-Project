@@ -1,0 +1,34 @@
+---
+- name: Install Helm
+  hosts: control
+  become: true
+  vars:
+    helm_version: "v3.20.1"
+
+  tasks:
+    # Helm 압축 파일 다운로드
+    - name: Download Helm archive
+      get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "/tmp/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        mode: "0644"
+
+    # Helm 압축 해제
+    - name: Extract Helm archive
+      unarchive:
+        src: "/tmp/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /tmp
+        remote_src: true
+
+    # Helm 바이너리 설치
+    - name: Install Helm binary
+      copy:
+        src: /tmp/linux-amd64/helm
+        dest: /usr/local/bin/helm
+        mode: "0755"
+        remote_src: true
+
+    # 버전 확인
+    - name: Check Helm version
+      command: helm version
+      changed_when: false

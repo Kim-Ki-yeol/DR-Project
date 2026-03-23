@@ -1,0 +1,33 @@
+name: Deploy Monitoring
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "monitoring/**"
+      - ".github/workflows/deploy-monitoring.yml"
+
+jobs:
+  deploy-monitoring:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create SSH key file
+        run: |
+          echo "${{ secrets.MONITORING_SSH_KEY }}" > monitoring_key.pem
+          chmod 600 monitoring_key.pem
+
+      - name: Copy monitoring files
+        run: |
+          scp -i monitoring_key.pem -o StrictHostKeyChecking=no -r monitoring ubuntu@${{ secrets.MONITORING_HOST }}:/opt/
+
+      - name: Deploy monitoring stack
+        run: |
+          ssh -i monitoring_key.pem -o StrictHostKeyChecking=no ubuntu@${{ secrets.MONITORING_HOST }} '
+            cd /opt/monitoring &&
+            docker compose up -d
+          '

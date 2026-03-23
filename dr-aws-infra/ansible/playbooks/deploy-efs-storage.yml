@@ -1,0 +1,38 @@
+---
+- name: Deploy EFS storage resources
+  hosts: control
+  become: false
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+    efs_id: ""
+
+  tasks:
+    - name: Fail when efs_id is empty
+      fail:
+        msg: "efs_id 값을 -e efs_id=fs-xxxxxxxx 형태로 넘겨야 합니다."
+      when: efs_id | length == 0
+
+    - name: Create temporary PV manifest with real EFS ID
+      copy:
+        dest: /tmp/dr-efs-pv.yaml
+        mode: "0644"
+        content: "{{ lookup('file', repo_root + '/k8s/efs/pv.yaml') | replace('__EFS_ID__', efs_id) }}"
+
+    - name: Apply StorageClass
+      command: kubectl apply -f {{ repo_root }}/k8s/efs/storageclass.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Apply PersistentVolume
+      command: kubectl apply -f /tmp/dr-efs-pv.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false
+
+    - name: Apply PersistentVolumeClaim
+      command: kubectl apply -f {{ repo_root }}/k8s/efs/pvc.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false

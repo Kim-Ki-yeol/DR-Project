@@ -1,0 +1,7 @@
+---
+- import_playbook: install-kubectl.yml
+- import_playbook: install-helm.yml
+- import_playbook: install-aws-load-balancer-controller.yml
+- import_playbook: install-metrics-server.yml
+- import_playbook: install-karpenter.yml
+- import_playbook: install-hpa.yml

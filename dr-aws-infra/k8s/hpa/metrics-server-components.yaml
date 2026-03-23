@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  # Metrics Server 서비스 계정
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Metrics Server 배포
+  name: metrics-server
+  namespace: kube-system
+  labels:
+    k8s-app: metrics-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: metrics-server
+  template:
+    metadata:
+      labels:
+        k8s-app: metrics-server
+    spec:
+      serviceAccountName: metrics-server
+      containers:
+        - name: metrics-server
+          image: registry.k8s.io/metrics-server/metrics-server:v0.8.1
+          args:
+            # EKS 환경에서 kubelet 인증 문제를 줄이기 위한 옵션
+            - --kubelet-insecure-tls
+            - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
+          ports:
+            - name: https
+              containerPort: 10250
+              protocol: TCP

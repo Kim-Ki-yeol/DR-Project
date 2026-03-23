@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dr-web
+  labels:
+    app: dr-web
+
+spec:
+  # 기본 Pod 개수
+  # HPA가 이후 부하에 따라 자동으로 조정할 수 있음
+  replicas: 1
+
+  # 이 Deployment가 관리할 Pod 라벨 선택
+  selector:
+    matchLabels:
+      app: dr-web
+
+  template:
+    metadata:
+      labels:
+        app: dr-web
+
+    spec:
+      containers:
+        - name: nginx
+
+          # 테스트용 웹 서버 이미지
+          image: nginx:stable
+
+          # 이미지가 로컬에 없을 때만 pull
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            # 컨테이너 내부에서 열리는 포트
+            - containerPort: 80
+
+          resources:
+            # HPA가 CPU 기준으로 동작하려면 requests 값이 중요함
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+
+            # 컨테이너가 사용할 최대 자원 제한
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+          # 컨테이너가 트래픽을 받을 준비가 되었는지 확인
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # 컨테이너가 비정상 상태인지 확인
+          # 실패가 반복되면 kubelet이 재시작할 수 있음
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20

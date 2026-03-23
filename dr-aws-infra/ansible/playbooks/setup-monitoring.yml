@@ -1,0 +1,25 @@
+---
+- name: Setup monitoring server
+  hosts: monitoring
+  become: true
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create monitoring directory
+      file:
+        path: /opt/monitoring
+        state: directory
+        mode: "0755"

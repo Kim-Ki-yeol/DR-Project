@@ -1,0 +1,55 @@
+---
+- name: Install kubectl and configure EKS access
+  hosts: control
+  become: true
+  vars:
+    # Terraform eks.tf 기준 클러스터 이름
+    cluster_name: "dr-aws-infra-eks-cluster"
+
+    # Terraform provider.tf / variables.tf 기준 리전
+    aws_region: "ap-northeast-2"
+
+    # EKS 1.29에 맞춘 kubectl 버전
+    kubectl_version: "v1.34.0"
+
+    # 실행 사용자 홈 디렉터리
+    target_user: "{{ ansible_user_id if ansible_user_id != 'root' else 'ubuntu' }}"
+    kubeconfig_path: "/home/{{ target_user }}/.kube/config"
+
+  tasks:
+    # 기본 패키지 설치
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - unzip
+          - awscli
+        state: present
+        update_cache: true
+
+    # kubectl 다운로드
+    - name: Download kubectl binary
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    # .kube 디렉터리 생성
+    - name: Create kube directory
+      file:
+        path: "/home/{{ target_user }}/.kube"
+        state: directory
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: "0700"
+
+    # EKS kubeconfig 생성
+    - name: Update kubeconfig for EKS cluster
+      become: false
+      command: >
+        aws eks update-kubeconfig
+        --region {{ aws_region }}
+        --name {{ cluster_name }}
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      changed_when: false

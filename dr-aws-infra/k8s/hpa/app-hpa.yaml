@@ -1,0 +1,24 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dr-web
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dr-web
+
+  # 비용을 고려해 최소 Pod는 1개로 시작
+  minReplicas: 1
+
+  # 과도한 스케일아웃 방지를 위해 최대 Pod 수도 약간 보수적으로 설정
+  maxReplicas: 4
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
